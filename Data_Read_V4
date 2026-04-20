@@ -1,0 +1,176 @@
+#include <LiquidCrystal.h>
+
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
+
+const int btnAvancar = 8;
+const int btnVoltar  = 9;
+const int btnOK      = 10;
+
+const int potPin = A0;
+
+int telaAtual = 0;
+const int totalTelas = 7;
+bool alarmesHabilitados = true;
+
+// Flags de alarme (uma por tela)
+bool alarmeDisparado[7] = {false, false, false, false, false, false, false};
+
+unsigned long ultimoAlarme = 0;
+
+// Caracteres da barra
+byte bar0[8] = { B00000, B00000, B00000, B00000, B00000, B00000, B00000, B00000 };
+byte bar1[8] = { B10000, B10000, B10000, B10000, B10000, B10000, B10000, B10000 };
+byte bar2[8] = { B11000, B11000, B11000, B11000, B11000, B11000, B11000, B11000 };
+byte bar3[8] = { B11100, B11100, B11100, B11100, B11100, B11100, B11100, B11100 };
+byte bar4[8] = { B11110, B11110, B11110, B11110, B11110, B11110, B11110, B11110 };
+byte bar5[8] = { B11111, B11111, B11111, B11111, B11111, B11111, B11111, B11111 };
+
+void setup() {
+  lcd.begin(16, 2);
+  lcd.clear();
+
+  lcd.createChar(0, bar0);
+  lcd.createChar(1, bar1);
+  lcd.createChar(2, bar2);
+  lcd.createChar(3, bar3);
+  lcd.createChar(4, bar4);
+  lcd.createChar(5, bar5);
+
+  pinMode(btnAvancar, INPUT_PULLUP);
+  pinMode(btnVoltar,  INPUT_PULLUP);
+  pinMode(btnOK,      INPUT_PULLUP);
+}
+
+void loop() {
+  // Botões
+  if (digitalRead(btnAvancar) == LOW) {
+    telaAtual = (telaAtual + 1) % totalTelas;
+    delay(250);
+  }
+  if (digitalRead(btnVoltar) == LOW) {
+    telaAtual = (telaAtual - 1 + totalTelas) % totalTelas;
+    delay(250);
+  }
+  if (digitalRead(btnOK) == LOW) {
+    alarmesHabilitados = !alarmesHabilitados;
+    delay(300);
+  }
+
+  mostrarTela(telaAtual);
+  delay(120);
+}
+
+// ====================== MOSTRAR TELA ======================
+void mostrarTela(int tela) {
+  int valorPot = analogRead(potPin);
+  int valor = 0;
+  String titulo = "";
+  String unidade = "";
+  int percentBar = 0;
+  bool deveAlarme = false;
+
+  lcd.clear();
+
+  switch (tela) {
+    case 0: // RPM
+      valor = map(valorPot, 0, 1023, 0, 8000);
+      titulo = "RPM";
+      unidade = "";
+      percentBar = map(valor, 0, 8000, 0, 100);
+      deveAlarme = (valor > 4000);
+      break;
+
+    case 1: // Velocidade
+      valor = map(valorPot, 0, 1023, 0, 220);
+      titulo = "VEL";
+      unidade = "kmh";
+      percentBar = map(valor, 0, 220, 0, 100);
+      deveAlarme = (valor > 100);
+      break;
+
+    case 2: // Temp. Líquido
+      valor = map(valorPot, 0, 1023, 0, 150);
+      titulo = "T.Liq";
+      unidade = "C";
+      percentBar = map(valor, 0, 150, 0, 100);
+      deveAlarme = (valor > 100);
+      break;
+
+    case 3: // Temp. Admissão
+      valor = map(valorPot, 0, 1023, 0, 100);
+      titulo = "T.Adm";
+      unidade = "C";
+      percentBar = map(valor, 0, 100, 0, 100);
+      deveAlarme = false;
+      break;
+
+    case 4: // Acelerador
+      valor = map(valorPot, 0, 1023, 0, 100);
+      titulo = "ACE";
+      unidade = "%";
+      percentBar = valor;
+      deveAlarme = false;
+      break;
+
+    case 5: // Avanço Ignição
+      valor = map(valorPot, 0, 1023, 0, 45);
+      titulo = "IGN";
+      unidade = "deg";
+      percentBar = map(valor, 0, 45, 0, 100);
+      deveAlarme = false;
+      break;
+
+    case 6: // Bateria
+      valor = map(valorPot, 0, 1023, 90, 150) / 10;
+      titulo = "BAT";
+      unidade = "V";
+      percentBar = map(valor, 9, 15, 0, 100);
+      deveAlarme = (valor < 11 || valor > 15);
+      break;
+  }
+
+  // Linha superior
+  lcd.setCursor(0, 0);
+  lcd.print(titulo);
+  lcd.setCursor(10, 0);
+  lcd.print(valor);
+  lcd.print(unidade);
+
+  // Linha inferior - Barra
+  if (alarmesHabilitados && deveAlarme && !alarmeDisparado[tela]) {
+    piscarBarra5x(percentBar);           // Alarme uma única vez
+    alarmeDisparado[tela] = true;        // Marca como disparado
+  } 
+  else {
+    drawFullBar(percentBar);
+  }
+
+  // Reset da flag quando sai da condição de alarme
+  if (!deveAlarme) {
+    alarmeDisparado[tela] = false;
+  }
+}
+
+// ==================== BARRA NORMAL ====================
+void drawFullBar(int percent) {
+  lcd.setCursor(0, 1);
+  float blocks = (percent * 16.0) / 100.0;
+  int full = floor(blocks);
+  float rem = blocks - full;
+
+  for (int i = 0; i < full; i++) lcd.write(5);
+  if (full < 16 && rem > 0) lcd.write(round(rem * 5));
+  for (int i = full + (rem > 0 ? 1 : 0); i < 16; i++) lcd.write(' ');
+}
+
+// ==================== PISCAR 5 VEZES (UMA ÚNICA VEZ) ====================
+void piscarBarra5x(int percent) {
+  for (int i = 0; i < 5; i++) {
+    drawFullBar(percent);
+    delay(180);
+    lcd.setCursor(0, 1);
+    lcd.print("                ");
+    delay(180);
+  }
+  drawFullBar(percent);   // Deixa a barra visível no final
+}
