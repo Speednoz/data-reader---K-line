@@ -1,0 +1,145 @@
+#include <LiquidCrystal.h>
+
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
+
+const int btnAvancar = 8;
+const int btnVoltar  = 9;
+const int btnOK      = 10;
+
+const int potPin = A0;
+
+int telaAtual = 0;
+const int totalTelas = 5;
+bool pausado = false;
+
+// ==================== CARACTERES DA BARRA ====================
+byte bar0[8] = { B00000, B00000, B00000, B00000, B00000, B00000, B00000, B00000 };
+byte bar1[8] = { B10000, B10000, B10000, B10000, B10000, B10000, B10000, B10000 };
+byte bar2[8] = { B11000, B11000, B11000, B11000, B11000, B11000, B11000, B11000 };
+byte bar3[8] = { B11100, B11100, B11100, B11100, B11100, B11100, B11100, B11100 };
+byte bar4[8] = { B11110, B11110, B11110, B11110, B11110, B11110, B11110, B11110 };
+byte bar5[8] = { B11111, B11111, B11111, B11111, B11111, B11111, B11111, B11111 };
+
+void setup() {
+  lcd.begin(16, 2);
+  lcd.clear();
+
+  lcd.createChar(0, bar0);
+  lcd.createChar(1, bar1);
+  lcd.createChar(2, bar2);
+  lcd.createChar(3, bar3);
+  lcd.createChar(4, bar4);
+  lcd.createChar(5, bar5);
+
+  pinMode(btnAvancar, INPUT_PULLUP);
+  pinMode(btnVoltar,  INPUT_PULLUP);
+  pinMode(btnOK,      INPUT_PULLUP);
+}
+
+void loop() {
+  // Leitura dos botões
+  if (digitalRead(btnAvancar) == LOW) {
+    telaAtual = (telaAtual + 1) % totalTelas;
+    delay(250);
+  }
+  if (digitalRead(btnVoltar) == LOW) {
+    telaAtual = (telaAtual - 1 + totalTelas) % totalTelas;
+    delay(250);
+  }
+  if (digitalRead(btnOK) == LOW) {
+    pausado = !pausado;
+    delay(250);
+  }
+
+  if (!pausado) {
+    mostrarTela(telaAtual);
+  } else {
+    lcd.setCursor(0, 1);
+    lcd.print("   PAUSADO      ");
+  }
+
+  delay(100);
+}
+
+// ==================== FUNÇÃO PRINCIPAL ====================
+void mostrarTela(int tela) {
+  int valorPot = analogRead(potPin);
+  
+  lcd.clear();
+
+  switch (tela) {
+    case 0:  // RPM
+      lcd.setCursor(0, 0);
+      lcd.print("RPM");
+      lcd.setCursor(11, 0);                    // Valor no final da linha 1
+      lcd.print(map(valorPot, 0, 1023, 800, 4800));
+      
+      drawFullBar(map(valorPot, 0, 1023, 0, 100));   // Barra completa na linha 2
+      break;
+
+    case 1:  // Temperatura
+      lcd.setCursor(0, 0);
+      lcd.print("Temp Motor");
+      lcd.setCursor(12, 0);
+      lcd.print(map(valorPot, 0, 1023, 60, 115));
+      lcd.print("C");
+      
+      drawFullBar(map(valorPot, 0, 1023, 0, 100));
+      break;
+
+    case 2:  // Velocidade
+      lcd.setCursor(0, 0);
+      lcd.print("Velocidade");
+      lcd.setCursor(11, 0);
+      lcd.print(map(valorPot, 0, 1023, 0, 160));
+      lcd.print("kmh");
+      
+      drawFullBar(map(valorPot, 0, 1023, 0, 100));   // barra opcional
+      break;
+
+    case 3:  // Carga do Motor
+      lcd.setCursor(0, 0);
+      lcd.print("Carga Motor");
+      lcd.setCursor(13, 0);
+      lcd.print(map(valorPot, 0, 1023, 0, 100));
+      lcd.print("%");
+      
+      drawFullBar(map(valorPot, 0, 1023, 0, 100));
+      break;
+
+    case 4:  // Status
+      lcd.setCursor(0, 0);
+      lcd.print("Status ECU");
+      lcd.setCursor(0, 1);
+      lcd.print("Sem falhas detectadas");
+      break;
+  }
+}
+
+// ==================== BARRA COMPLETA NA LINHA 2 ====================
+void drawFullBar(int percent) {
+  if (percent < 0) percent = 0;
+  if (percent > 100) percent = 100;
+
+  lcd.setCursor(0, 1);
+
+  float blocksFloat = (percent * 16.0) / 100.0;
+  int fullBlocks = floor(blocksFloat);
+  float remainder = blocksFloat - fullBlocks;
+
+  // Blocos cheios
+  for (int i = 0; i < fullBlocks; i++) {
+    lcd.write(5);
+  }
+
+  // Bloco parcial
+  if (fullBlocks < 16 && remainder > 0) {
+    int partial = round(remainder * 5);
+    if (partial > 0) lcd.write(partial);
+  }
+
+  // Preenche o resto com espaços
+  for (int i = fullBlocks + (remainder > 0 ? 1 : 0); i < 16; i++) {
+    lcd.write(' ');
+  }
+}
